@@ -227,6 +227,7 @@ Resources:
                 Action:
                   - ec2:*
                   - ssm:GetParameter
+                  - ssm:GetParameters
                 Resource: "*"
 
   CodePipelineServiceRole:
