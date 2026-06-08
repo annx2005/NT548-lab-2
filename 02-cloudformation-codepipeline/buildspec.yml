@@ -10,9 +10,11 @@ phases:
   install:
     commands:
       - python3 --version
-      - pip3 install --upgrade pip
-      - pip3 install --upgrade setuptools wheel
-      - pip3 install cfn-lint taskcat
+      - python3 -m pip install --upgrade pip
+      - python3 -m pip install "setuptools==69.5.1" wheel
+      - python3 -m pip install cfn-lint taskcat
+      - python3 -m pip install "setuptools==69.5.1"
+      - python3 -c "import pkg_resources; print('pkg_resources is available')"
   pre_build:
     commands:
       - cfn-lint -i W3005 -- $STACKS_GLOB "$PIPELINE_TEMPLATE"
