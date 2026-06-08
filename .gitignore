@@ -1,0 +1,14 @@
+# Terraform
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/*.tfplan
+**/crash.log
+**/crash.*.log
+**/*.tfvars
+!**/*.tfvars.example
+
+# macOS / editor
+.DS_Store
+.idea/
+.vscode/

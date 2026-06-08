@@ -1,0 +1,13 @@
+framework:
+  - terraform
+quiet: true
+compact: true
+download-external-modules: false
+skip-download: true
+skip-check:
+  # Lab scope does not require centralized VPC flow logs.
+  - CKV2_AWS_11
+  # The lab requires one public EC2 instance as a bastion.
+  - CKV_AWS_88
+  # Security groups are attached through a sibling module; Checkov reports this as a module graph false-positive.
+  - CKV2_AWS_5
