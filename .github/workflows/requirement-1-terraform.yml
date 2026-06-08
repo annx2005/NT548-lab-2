@@ -17,6 +17,7 @@ permissions:
   id-token: write
 
 env:
+  BOOTSTRAP_WORKING_DIR: 01-terraform-github-actions-checkov/bootstrap-github-oidc
   TF_WORKING_DIR: 01-terraform-github-actions-checkov/terraform
   CHECKOV_CONFIG: 01-terraform-github-actions-checkov/.checkov.yml
   AWS_REGION: ap-southeast-1
@@ -33,6 +34,15 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+
+      - name: Bootstrap Terraform fmt
+        run: terraform -chdir="$BOOTSTRAP_WORKING_DIR" fmt -check -recursive
+
+      - name: Bootstrap Terraform init
+        run: terraform -chdir="$BOOTSTRAP_WORKING_DIR" init -backend=false
+
+      - name: Bootstrap Terraform validate
+        run: terraform -chdir="$BOOTSTRAP_WORKING_DIR" validate
 
       - name: Terraform fmt
         run: terraform -chdir="$TF_WORKING_DIR" fmt -check -recursive

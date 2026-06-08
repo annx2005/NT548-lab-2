@@ -32,6 +32,12 @@ Workflow GitHub Actions nam tai:
 .github/workflows/requirement-1-terraform.yml
 ```
 
+Bootstrap AWS OIDC/IAM cho GitHub Actions nam tai:
+
+```text
+bootstrap-github-oidc/
+```
+
 ## Chay local
 
 ```bash
@@ -54,12 +60,12 @@ terraform plan
 terraform apply
 ```
 
-Neu muon dung S3 backend nhu workflow, tao S3 bucket truoc va chay:
+Neu muon dung S3 backend nhu workflow, chay bootstrap truoc de tao S3 bucket va IAM role:
 
 ```bash
-terraform init \
-  -backend-config="bucket=YOUR_TF_STATE_BUCKET" \
-  -backend-config="region=ap-southeast-1"
+cd ../bootstrap-github-oidc
+terraform init
+terraform apply
 ```
 
 ## Checkov
@@ -83,6 +89,7 @@ Mot so cau hinh bao mat da bo sung so voi lab 1:
 
 Workflow tu dong chay khi push/pull request co thay doi trong phan 1:
 
+- `terraform fmt/init/validate` cho `bootstrap-github-oidc`
 - `terraform fmt -check`
 - `terraform init -backend=false`
 - `terraform validate`
@@ -99,7 +106,7 @@ Pull request chi chay validate va Checkov, khong deploy ha tang AWS.
 
 Can cau hinh GitHub Secrets:
 
-- `AWS_ROLE_TO_ASSUME`: IAM role cho GitHub OIDC.
-- `TF_STATE_BUCKET`: S3 bucket luu Terraform state.
+- `AWS_ROLE_TO_ASSUME`: lay tu output `github_actions_role_arn` cua `bootstrap-github-oidc`.
+- `TF_STATE_BUCKET`: lay tu output `terraform_state_bucket` cua `bootstrap-github-oidc`.
 - `MY_IP_CIDR`: IP public dang CIDR, vi du `1.2.3.4/32`.
 - `EC2_KEY_NAME`: ten EC2 Key Pair.
