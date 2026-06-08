@@ -39,9 +39,15 @@ variable "my_ip_cidr" {
 }
 
 variable "ami_id" {
-  description = "AMI ID or SSM public parameter reference for the EC2 instances."
+  description = "Optional explicit AMI ID for the EC2 instances. Leave empty to resolve Amazon Linux 2 from SSM. Legacy resolve:ssm: values are also supported."
   type        = string
-  default     = "resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-kernel-default-hvm-x86_64-gp2"
+  default     = ""
+}
+
+variable "ami_ssm_parameter" {
+  description = "SSM public parameter used to resolve the latest Amazon Linux 2 AMI when ami_id is empty."
+  type        = string
+  default     = "/aws/service/ami-amazon-linux-latest/amzn2-ami-kernel-default-hvm-x86_64-gp2"
 }
 
 variable "instance_type" {
@@ -54,4 +60,3 @@ variable "key_name" {
   description = "Name of an existing EC2 Key Pair in the selected AWS region."
   type        = string
 }
-
