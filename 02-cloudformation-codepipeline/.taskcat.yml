@@ -1,0 +1,34 @@
+project:
+  name: nt548-lab2-cloudformation
+  owner: annx2005
+  regions:
+    - ap-southeast-1
+  s3_bucket: ""
+
+tests:
+  vpc:
+    template: ./02-cloudformation-codepipeline/stacks/01-vpc.yaml
+    parameters:
+      VpcCidr: 10.0.0.0/16
+
+  network:
+    template: ./02-cloudformation-codepipeline/stacks/02-network.yaml
+    parameters:
+      VpcStackName: nt548-lab2-vpc
+      PublicSubnetCidr: 10.0.1.0/24
+      PrivateSubnetCidr: 10.0.2.0/24
+      AvailabilityZone: ap-southeast-1a
+
+  security-groups:
+    template: ./02-cloudformation-codepipeline/stacks/03-security-groups.yaml
+    parameters:
+      VpcStackName: nt548-lab2-vpc
+      MyIpCidr: 127.0.0.1/32
+
+  ec2:
+    template: ./02-cloudformation-codepipeline/stacks/04-ec2.yaml
+    parameters:
+      NetworkStackName: nt548-lab2-network
+      SecurityGroupStackName: nt548-lab2-security-groups
+      InstanceType: t3.micro
+      KeyName: taskcat-lint-placeholder

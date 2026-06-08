@@ -1,0 +1,429 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: NT548 Lab 2 pipeline that validates and deploys the CloudFormation stacks from NT548 Lab 1.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: nt548-lab2
+    Description: Prefix used for pipeline resources.
+    AllowedPattern: "^[a-zA-Z0-9-]+$"
+
+  CodeCommitRepositoryName:
+    Type: String
+    Default: nt548-lab2-cloudformation
+    Description: CodeCommit repository used as the pipeline source.
+    AllowedPattern: "^[\\w\\.-]+$"
+
+  CodeCommitBranchName:
+    Type: String
+    Default: main
+    Description: CodeCommit branch watched by CodePipeline.
+
+  BuildSpecPath:
+    Type: String
+    Default: 02-cloudformation-codepipeline/buildspec.yml
+    Description: buildspec.yml path inside the CodeCommit source artifact.
+
+  VpcTemplatePath:
+    Type: String
+    Default: SourceArtifact::02-cloudformation-codepipeline/stacks/01-vpc.yaml
+    Description: VPC stack template path inside the CodeCommit source artifact.
+
+  NetworkTemplatePath:
+    Type: String
+    Default: SourceArtifact::02-cloudformation-codepipeline/stacks/02-network.yaml
+    Description: Network stack template path inside the CodeCommit source artifact.
+
+  SecurityGroupsTemplatePath:
+    Type: String
+    Default: SourceArtifact::02-cloudformation-codepipeline/stacks/03-security-groups.yaml
+    Description: Security groups stack template path inside the CodeCommit source artifact.
+
+  Ec2TemplatePath:
+    Type: String
+    Default: SourceArtifact::02-cloudformation-codepipeline/stacks/04-ec2.yaml
+    Description: EC2 stack template path inside the CodeCommit source artifact.
+
+  VpcStackName:
+    Type: String
+    Default: nt548-lab2-vpc
+    Description: Name of the deployed VPC stack.
+
+  NetworkStackName:
+    Type: String
+    Default: nt548-lab2-network
+    Description: Name of the deployed network stack.
+
+  SecurityGroupStackName:
+    Type: String
+    Default: nt548-lab2-security-groups
+    Description: Name of the deployed security group stack.
+
+  Ec2StackName:
+    Type: String
+    Default: nt548-lab2-ec2
+    Description: Name of the deployed EC2 stack.
+
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR block for the lab VPC.
+
+  PublicSubnetCidr:
+    Type: String
+    Default: 10.0.1.0/24
+    Description: CIDR block for the public subnet.
+
+  PrivateSubnetCidr:
+    Type: String
+    Default: 10.0.2.0/24
+    Description: CIDR block for the private subnet.
+
+  AvailabilityZone:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: ap-southeast-1a
+    Description: Availability Zone passed to the network stack.
+
+  MyIpCidr:
+    Type: String
+    Description: Your public IP CIDR allowed to SSH to the public EC2 instance.
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\/(3[0-2]|[12]?[0-9])$"
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    Description: EC2 instance type passed to the EC2 stack.
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+      - t3.small
+      - t3.medium
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 Key Pair in the selected AWS region.
+
+Resources:
+  SourceRepository:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryName: !Ref CodeCommitRepositoryName
+      RepositoryDescription: NT548 Lab 2 CloudFormation source repository.
+      Tags:
+        - Key: Name
+          Value: !Ref CodeCommitRepositoryName
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-pipeline-artifacts
+
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt ArtifactBucket.Arn
+              - !Sub ${ArtifactBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: codebuild-validate-cloudformation
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub ${ArtifactBucket.Arn}/*
+
+  ValidateProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${ProjectName}-cfn-validate
+      Description: Run cfn-lint and Taskcat lint for NT548 Lab 1 CloudFormation stacks.
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-aarch64-standard:3.0
+        Type: ARM_CONTAINER
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+          - Name: STACKS_GLOB
+            Value: 02-cloudformation-codepipeline/stacks/*.yaml
+          - Name: PIPELINE_TEMPLATE
+            Value: 02-cloudformation-codepipeline/templates/pipeline.yml
+          - Name: TASKCAT_CONFIG
+            Value: 02-cloudformation-codepipeline/.taskcat.yml
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: !Ref BuildSpecPath
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-cfn-validate
+
+  CloudFormationExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: cloudformation-deploy-lab1-stacks
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:*
+                  - ssm:GetParameter
+                Resource: "*"
+
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: codepipeline-source-build-deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codecommit:CancelUploadArchive
+                  - codecommit:GetBranch
+                  - codecommit:GetCommit
+                  - codecommit:GetRepository
+                  - codecommit:GetUploadArchiveStatus
+                  - codecommit:UploadArchive
+                Resource: !GetAtt SourceRepository.Arn
+              - Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                Resource: !GetAtt ValidateProject.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketVersioning
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub ${ArtifactBucket.Arn}/*
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DeleteStack
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:SetStackPolicy
+                  - cloudformation:ValidateTemplate
+                Resource: "*"
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt CloudFormationExecutionRole.Arn
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub ${ProjectName}-cloudformation-pipeline
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      RestartExecutionOnUpdate: true
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: CodeCommitSource
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeCommit
+                Version: "1"
+              Configuration:
+                RepositoryName: !GetAtt SourceRepository.Name
+                BranchName: !Ref CodeCommitBranchName
+                PollForSourceChanges: true
+                OutputArtifactFormat: CODE_ZIP
+              OutputArtifacts:
+                - Name: SourceArtifact
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: CfnLintAndTaskcat
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Ref ValidateProject
+              InputArtifacts:
+                - Name: SourceArtifact
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: DeployVpcStack
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: "1"
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: !Ref VpcStackName
+                TemplatePath: !Ref VpcTemplatePath
+                RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                ParameterOverrides: !Sub |
+                  {
+                    "VpcCidr": "${VpcCidr}"
+                  }
+              InputArtifacts:
+                - Name: SourceArtifact
+              RunOrder: 1
+            - Name: DeployNetworkStack
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: "1"
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: !Ref NetworkStackName
+                TemplatePath: !Ref NetworkTemplatePath
+                RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                ParameterOverrides: !Sub |
+                  {
+                    "VpcStackName": "${VpcStackName}",
+                    "PublicSubnetCidr": "${PublicSubnetCidr}",
+                    "PrivateSubnetCidr": "${PrivateSubnetCidr}",
+                    "AvailabilityZone": "${AvailabilityZone}"
+                  }
+              InputArtifacts:
+                - Name: SourceArtifact
+              RunOrder: 2
+            - Name: DeploySecurityGroupsStack
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: "1"
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: !Ref SecurityGroupStackName
+                TemplatePath: !Ref SecurityGroupsTemplatePath
+                RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                ParameterOverrides: !Sub |
+                  {
+                    "VpcStackName": "${VpcStackName}",
+                    "MyIpCidr": "${MyIpCidr}"
+                  }
+              InputArtifacts:
+                - Name: SourceArtifact
+              RunOrder: 3
+            - Name: DeployEc2Stack
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: "1"
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: !Ref Ec2StackName
+                TemplatePath: !Ref Ec2TemplatePath
+                RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                ParameterOverrides: !Sub |
+                  {
+                    "NetworkStackName": "${NetworkStackName}",
+                    "SecurityGroupStackName": "${SecurityGroupStackName}",
+                    "KeyName": "${KeyName}",
+                    "InstanceType": "${InstanceType}"
+                  }
+              InputArtifacts:
+                - Name: SourceArtifact
+              RunOrder: 4
+
+Outputs:
+  RepositoryCloneUrlHttp:
+    Description: HTTPS clone URL for the CodeCommit repository.
+    Value: !GetAtt SourceRepository.CloneUrlHttp
+
+  RepositoryCloneUrlSsh:
+    Description: SSH clone URL for the CodeCommit repository.
+    Value: !GetAtt SourceRepository.CloneUrlSsh
+
+  PipelineName:
+    Description: CodePipeline name.
+    Value: !Ref Pipeline
+
+  ArtifactBucketName:
+    Description: S3 bucket used by CodePipeline artifacts.
+    Value: !Ref ArtifactBucket
+
+  CodeBuildProjectName:
+    Description: CodeBuild validation project name.
+    Value: !Ref ValidateProject

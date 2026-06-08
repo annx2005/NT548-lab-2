@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "NT548 Lab 1 - VPC stack."
+
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR block for the VPC.
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: nt548-lab1-vpc
+
+  LabDefaultSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: nt548-lab1-default-sg
+      GroupDescription: Default security group for the NT548 lab VPC
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: nt548-lab1-default-sg
+
+Outputs:
+  VpcId:
+    Description: VPC ID.
+    Value: !Ref Vpc
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+
+  DefaultVpcSecurityGroupId:
+    Description: Default security group automatically created with the VPC.
+    Value: !GetAtt Vpc.DefaultSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-DefaultVpcSecurityGroupId"
+
+  LabDefaultSecurityGroupId:
+    Description: Lab default security group created by this template.
+    Value: !Ref LabDefaultSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-LabDefaultSecurityGroupId"

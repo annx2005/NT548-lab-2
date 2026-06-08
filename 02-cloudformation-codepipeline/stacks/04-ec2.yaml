@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "NT548 Lab 1 - Public and private EC2 instances."
+
+Parameters:
+  NetworkStackName:
+    Type: String
+    Default: nt548-lab1-network
+    Description: Name of the network stack that exports subnet IDs.
+
+  SecurityGroupStackName:
+    Type: String
+    Default: nt548-lab1-security-groups
+    Description: Name of the security group stack that exports EC2 security group IDs.
+
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-kernel-default-hvm-x86_64-gp2
+    Description: SSM parameter path for the Amazon Linux 2 AMI.
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    Description: EC2 instance type.
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+      - t3.small
+      - t3.medium
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Existing EC2 Key Pair name in the deployment region.
+
+Resources:
+  PublicEc2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      NetworkInterfaces:
+        - DeviceIndex: "0"
+          SubnetId:
+            Fn::ImportValue: !Sub "${NetworkStackName}-PublicSubnetId"
+          GroupSet:
+            - Fn::ImportValue: !Sub "${SecurityGroupStackName}-PublicEc2SecurityGroupId"
+          AssociatePublicIpAddress: true
+      Tags:
+        - Key: Name
+          Value: nt548-lab1-public-ec2
+
+  PrivateEc2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      NetworkInterfaces:
+        - DeviceIndex: "0"
+          SubnetId:
+            Fn::ImportValue: !Sub "${NetworkStackName}-PrivateSubnetId"
+          GroupSet:
+            - Fn::ImportValue: !Sub "${SecurityGroupStackName}-PrivateEc2SecurityGroupId"
+          AssociatePublicIpAddress: false
+      Tags:
+        - Key: Name
+          Value: nt548-lab1-private-ec2
+
+Outputs:
+  PublicInstanceId:
+    Description: Public EC2 instance ID.
+    Value: !Ref PublicEc2Instance
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicInstanceId"
+
+  PublicInstancePublicIp:
+    Description: Public EC2 instance public IP.
+    Value: !GetAtt PublicEc2Instance.PublicIp
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicInstancePublicIp"
+
+  PrivateInstanceId:
+    Description: Private EC2 instance ID.
+    Value: !Ref PrivateEc2Instance
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateInstanceId"
+
+  PrivateInstancePrivateIp:
+    Description: Private EC2 instance private IP.
+    Value: !GetAtt PrivateEc2Instance.PrivateIp
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateInstancePrivateIp"

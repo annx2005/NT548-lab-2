@@ -1,0 +1,23 @@
+version: 0.2
+
+env:
+  variables:
+    STACKS_GLOB: 02-cloudformation-codepipeline/stacks/*.yaml
+    PIPELINE_TEMPLATE: 02-cloudformation-codepipeline/templates/pipeline.yml
+    TASKCAT_CONFIG: 02-cloudformation-codepipeline/.taskcat.yml
+
+phases:
+  install:
+    commands:
+      - python3 --version
+      - pip3 install --upgrade pip
+      - pip3 install cfn-lint taskcat
+  pre_build:
+    commands:
+      - cfn-lint -i W3005 -- $STACKS_GLOB "$PIPELINE_TEMPLATE"
+  build:
+    commands:
+      - taskcat lint -i "$TASKCAT_CONFIG" -p .
+  post_build:
+    commands:
+      - echo "CloudFormation validation finished successfully."
