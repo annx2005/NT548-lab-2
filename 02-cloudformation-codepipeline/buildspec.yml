@@ -11,6 +11,7 @@ phases:
     commands:
       - python3 --version
       - pip3 install --upgrade pip
+      - pip3 install --upgrade setuptools wheel
       - pip3 install cfn-lint taskcat
   pre_build:
     commands:
@@ -20,4 +21,4 @@ phases:
       - taskcat lint -i "$TASKCAT_CONFIG" -p .
   post_build:
     commands:
-      - echo "CloudFormation validation finished successfully."
+      - echo "CloudFormation validation commands completed."
