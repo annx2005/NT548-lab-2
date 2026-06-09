@@ -1,0 +1,3 @@
+[submodule "03-github-actions-chatbot-cicd/vietnamese-legal-chatbot"]
+	path = 03-github-actions-chatbot-cicd/vietnamese-legal-chatbot
+	url = https://github.com/annx2005/vietnamese-legal-chatbot.git
